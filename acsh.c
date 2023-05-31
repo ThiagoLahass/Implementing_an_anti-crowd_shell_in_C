@@ -12,12 +12,18 @@
 #define MAX_COMMANDS 5
 #define MAX_ARGS 3
 
+
+pid_t foreground_pid = 0;
+pid_t session_pid = 0;
+
 static void trim(char *str);
 
 void process_command(char* command);
 
+void execute_command(char* command);
+
 int main( int argc, char* argv[]){
-    char* line_commands = calloc(MAX_LINE_LENGTH, sizeof(char));    // Comando de entrada do usuario no sheel
+    char* line_commands = calloc(MAX_LINE_LENGTH, sizeof(char));    // Comando de entrada do usuario no shell
     char** commands = calloc(MAX_COMMANDS, sizeof(char*));          // Vetor de comandos ( no maximo MAX_COMMANDS)
     for(int i = 0; i < MAX_COMMANDS; i++ ){
         commands[i] = calloc(MAX_COMMAND_LENGTH, sizeof(char));     // Comandos em si
@@ -38,7 +44,12 @@ int main( int argc, char* argv[]){
         // Removendo o caractere nova linha ('\n') do final do comando e substitui por \0
         line_commands[strcspn(line_commands, "\n")] = '\0';
 
+        // Sair do shell se o usuario digitar exit
         if (strcmp(line_commands, "exit") == 0) {
+            if (session_pid != 0) {                     //TO-DO: COMENTAR ESSE TRECHO DE CODIGO
+                kill(-session_pid, SIGUSR1);
+                session_pid = 0;
+            }
             break;
         }
 
@@ -88,7 +99,8 @@ int main( int argc, char* argv[]){
         }
         /*========================== FIM (PROCESSAMENTO DOS COMANDOS) ============================*/
 
-        break;
+        printf("========== FIM WHILE========\n");
+
     }
 
     free(line_commands);
@@ -125,4 +137,62 @@ static void trim(char *str) {
 
 void process_command(char* command) {
     printf("Processando comando '%s' ...\n", command);
+
+    pid_t pid = fork();
+
+    if (pid == 0) { // Processo filho
+        if (session_pid != 0) {
+            setpgid(0, session_pid);  // Seta process group ID = session PID
+        }
+
+        printf("Eu sou o filho %d e vou executar o comando '%s' ...\n", getpid(), command);
+
+        execute_command(command);
+        exit(0);
+    } 
+    else if (pid > 0) { // Processo pai
+        printf("Eu sou o pai, vulgo %d\n", getpid());
+
+        if (session_pid == 0) {
+            session_pid = pid;
+        }
+
+        printf("Aguardando meu filho %d terminar\n", pid);
+
+        wait(NULL);
+        printf("\nMeu filho %d terminou!!!\n", pid);
+    }
+    else {
+        perror("Erro ao criar o processo");
+        exit(1);
+    }
+}
+
+void execute_command(char* command) {
+    char* args[MAX_ARGS + 2];  // Espaço adicional para o nome do programa e terminação em NULL
+    int arg_count = 0;
+
+    args[arg_count++] = strtok(command, " ");  // Pega o nome do programa
+
+    // Separar argumentos do comando
+    char* token;
+    while ((token = strtok(NULL, " ")) != NULL && arg_count <= MAX_ARGS + 1) { 
+        args[arg_count] = token;
+        trim(args[arg_count]);
+        arg_count++;
+    }
+    args[arg_count] = NULL;
+
+    for(int i = 0; i <= arg_count; i++ ){
+        printf("args[%d] = '%s'\n", i, args[i]);
+    }
+    printf("\n");
+
+    // Tentar executar o comando
+    if (arg_count > 0) {
+        printf("%s:\n", command);
+        execvp(args[0], args);
+        perror("Erro ao executar o comando");
+        exit(1);
+    }
 }
