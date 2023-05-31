@@ -22,7 +22,7 @@ static void trim(char *str) {
         memmove(str, str + start, end - start + 2);
     }
 }
-/*======================== FIM (TRIM FUNCTION) ======================*/
+/*======================== END (TRIM FUNCTION) ======================*/
 
 
 #define MAX_COMMANDS_LENGTH 1000
@@ -41,7 +41,7 @@ int main( int argc, char* argv[]){
     const char delimiter[] = "<3";
 
 
-    int num_commands = 0; // Numero de comandos inseridos pelo usuario atual
+    int num_commands = 0; // Numero de comandos atual inserido pelo usuario
 
     while (1){
 
