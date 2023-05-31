@@ -62,6 +62,12 @@ int main( int argc, char* argv[]){
 
         /* função strstr() é usada para localizar a próxima ocorrência do delimitador na string*/
         while ((token = strstr(remaining, delimiter)) != NULL) {
+            
+            /*Numero de comandos é maior que o permitido*/
+            if( num_commands+2 > MAX_COMMANDS ){
+                fprintf(stderr, "ERRO: Numero de comandos é maior que o permitido\n");
+                exit(-1);
+            }
 
             /*Em seguida, é calculado o comprimento da substring antes do delimitador*/
             int length = token - remaining;
