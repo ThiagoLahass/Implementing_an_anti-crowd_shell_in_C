@@ -1,3 +1,5 @@
+//#define _POSIX_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <libgen.h>
@@ -7,6 +9,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <ctype.h>
+#include <errno.h>
 
 #define MAX_LINE_LENGTH 1000
 #define MAX_COMMAND_LENGTH 200
@@ -14,6 +17,9 @@
 #define MAX_ARGS 3
 
 static void trim(char *str);
+
+void child_death_handler(int n);
+void ctrl_handler(int n);
 
 // void process_command(char* command);
 
@@ -27,6 +33,16 @@ int main( int argc, char* argv[]){
     }
     int command_count = 0;                                          // Numero de comandos atual inserido pelo usuario
     const char delimiter[] = "<3";                                  // Delimitador usado
+
+    /* struct sigaction sa;
+    sa.sa_handler = ctrl_handler;
+    sa.sa_flags = 0;
+
+    if ((sigemptyset(&sa.sa_mask) == -1) ||
+       (sigaction(SIGINT, &sa, NULL) == -1) ||
+       (sigaction(SIGQUIT, &sa, NULL) == -1) ||
+       (sigaction(SIGTSTP, &sa, NULL) == -1))
+            perror("Failed to set SIGINT || SIGQUIT || SIGTSTP to handle Ctrl-..."); */
 
     while (1){
 
@@ -93,14 +109,20 @@ int main( int argc, char* argv[]){
         /*============================= PROCESSAMENTO DOS COMANDOS ===============================*/
         for(int i = 0; i < command_count; i++){
 
-            char* args[MAX_ARGS + 2];                                   // Espaço adicional para o nome do programa e terminação em NULL
+            char* args[MAX_ARGS + 2];                                   // Espaço adicional para o nome do programa, terminação em NULL
             int arg_count = 0;
+
+            int flag_foreground = 0;
 
             args[arg_count++] = strtok(commands[i], " ");               // Pega o nome do programa
 
             /* Separar argumentos do comando */
             char* token;
             while ((token = strtok(NULL, " ")) != NULL && arg_count <= MAX_ARGS + 1) { 
+                if(strcmp(token, "%") == 0){
+                    flag_foreground = 1;
+                    break;
+                }
                 args[arg_count] = token;
                 trim(args[arg_count]);
                 arg_count++;
@@ -137,15 +159,43 @@ int main( int argc, char* argv[]){
             }
             /*Se não, tentar executar comando externo*/
             else if (arg_count > 0){
-                pid_t pid = fork();                                     // fork
 
-                if (pid == 0) {                                         // Processo filho
-                    execvp(args[0], args);                              // Chama o execvp para executar o comando com seus parametros
+                pid_t pid = fork();                                                 // fork
+
+                if (pid == 0) {                                                     // Processo filho
+                    printf("sid child antes: %d", getsid(getpid()));
+                    if (setsid() < 0) {                                             // Muda o session id do processo filho
+                        fprintf(stderr, "Falha ao iniciar uma nova sessão para o processo filho.\n");
+                        exit(1);
+                    }
+                    printf("sid child depois: %d", getsid(getpid()));
+                    
+                    execvp(args[0], args);                                          // Chama o execvp para executar o comando com seus parametros
                     perror("Erro ao executar o comando");
                     exit(1);
                 } 
-                else if (pid > 0) {                                     // Processo pai
-                    wait(NULL);                                         // Aguarda o termino do processo filho
+                else if (pid > 0) {
+                    printf("sid pai: %d", getsid(getpid()));                        // Processo pai
+                    if(command_count == 1 && flag_foreground == 1){                 // Se há apenas um comando externo e foi terminado em %
+                        //===== Enquanto um processo roda em foreground ignorar sinais de ctrl+... =====//
+                        struct sigaction sa_fg;
+                        sa_fg.sa_handler = ctrl_handler;
+                        sa_fg.sa_flags = 0;
+
+                        if ((sigemptyset(&sa_fg.sa_mask) == -1) ||
+                            (sigaddset(&sa_fg.sa_mask, SIGINT) == -1) ||
+                            (sigaddset(&sa_fg.sa_mask, SIGQUIT) == -1) ||
+                            (sigaddset(&sa_fg.sa_mask, SIGTSTP) == -1))
+                                perror("Failed to initialize the signal set");
+                        else if (sigprocmask(SIG_BLOCK, &sa_fg.sa_mask, NULL) == -1)
+                            perror("Failed to block SIGINT SIGQUIT and SIGTSTP");
+
+                        
+                        waitpid(pid, NULL, 0);                                      // Espera pelo termino do processo em fg
+                    }
+                    else{
+                        signal(SIGCHLD, child_death_handler);                       // Registra um handler para SIGCHLD
+                    }
                 }
                 else {
                     perror("Erro ao criar o processo");
@@ -192,6 +242,34 @@ static void trim(char *str) {
     }
 }
 /*======================== END (TRIM FUNCTION) ======================*/
+
+
+/*========================== SIGCHLD handler ========================*/
+void child_death_handler(int n){
+    pid_t childpid;
+    while (childpid = waitpid(-1, NULL, WNOHANG))
+        if ((childpid == -1) && (errno != EINTR))
+            break;
+}
+
+/*================ SIGINT, SIGQUIT, SIGTSTP handler =================*/
+void ctrl_handler(int n){
+    /* struct sigaction sa_hand;
+
+    if ((sigemptyset(&sa_hand.sa_mask) == -1) ||
+        (sigaddset(&sa_hand.sa_mask, SIGINT) == -1) ||
+        (sigaddset(&sa_hand.sa_mask, SIGQUIT) == -1) ||
+        (sigaddset(&sa_hand.sa_mask, SIGTSTP) == -1))
+            perror("Failed to initialize the signal set");
+    else if (sigprocmask(SIG_BLOCK, &sa_hand.sa_mask, NULL) == -1)
+        perror("Failed to block SIGINT SIGQUIT and SIGTSTP");
+
+
+    char handmsg[] = "Não adianta me enviar o sinal por Ctrl-... . Estou vacinado!\n";
+    int msglen = sizeof(handmsg);
+    write(STDERR_FILENO, handmsg, msglen); */
+}
+
 
 // void process_command(char* command) {
 
