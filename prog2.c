@@ -13,10 +13,10 @@ int main(int argc, char* argv[]){
         printf("arg1: %s // arg2: %s // arg3: %s\n", argv[1], argv[2], argv[3]);
     }
     
-    printf("Executing program aux 'prog1'\n");
+    printf("Executing program aux 'prog2'\n");
     int i = 1;
-    while (i<6){
-        printf("Looping (prog1)...\n");
+    while (i<10){
+        printf("Looping (prog2)...\n");
         sleep(1);
         i++;
     }
