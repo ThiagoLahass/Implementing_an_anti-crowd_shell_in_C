@@ -22,6 +22,7 @@ static void trim(char *str);
 
 void child_death_handler(int n);
 void ctrl_handler(int n);
+void ctrl_handler_fg(int n);
 
 // void process_command(char* command);
 
@@ -35,7 +36,7 @@ int main( int argc, char* argv[]){
     }
     const char delimiter[] = "<3";                                          // Delimitador usado
 
-    /* struct sigaction sa;
+    struct sigaction sa;
     sa.sa_handler = ctrl_handler;
     sa.sa_flags = 0;
 
@@ -43,7 +44,7 @@ int main( int argc, char* argv[]){
        (sigaction(SIGINT, &sa, NULL) == -1) ||
        (sigaction(SIGQUIT, &sa, NULL) == -1) ||
        (sigaction(SIGTSTP, &sa, NULL) == -1))
-            perror("Failed to set SIGINT || SIGQUIT || SIGTSTP to handle Ctrl-..."); */
+            perror("Failed to set SIGINT || SIGQUIT || SIGTSTP to handle Ctrl-...");
 
     while (1){
         int flag_input_valido = 1;
@@ -176,6 +177,7 @@ int main( int argc, char* argv[]){
         }
         /*============= FIM (LEITURA DO COMANDO DE ENTRADA E SEPARACAO DOS COMANDOS) =============*/
 
+        if(strcmp(commands[command_count-1],"") == 0) continue;
 
         /*============================= PROCESSAMENTO DOS COMANDOS ===============================*/
         if( flag_input_valido == 1 ){
@@ -239,79 +241,82 @@ int main( int argc, char* argv[]){
 
 
                 if( flag_input_valido == 1 ){
-                    // // VERIFICAÇÃO DE OPERAÇÃO INTERNA - cd
-                    // if( strcmp(args[0], "cd") == 0){
-                    //     char buffer[256];
-                    //     char *current_dir = getcwd(buffer, sizeof(buffer));             // Get diretorio atual
-                    //     if (current_dir != NULL) {
-                    //         if(args[1] != NULL ){
-                    //             if(strcmp(args[1], "..") == 0 ){                        // Se for operação de voltar um diretório
-                    //                 if(chdir(dirname(current_dir)) != 0){               // chdir seta o diretório atual para o parametro passado
-                    //                     printf("Falha ao retornar ao diretório pai!\n");    // |->> dirname retorna o diretório pai do parametro passado
-                    //                 }
-                    //             }
-                    //             else{                                                   // Se não, tentar entrar no diretorio especificado
-                    //                 // Concatenar o diretório desejado com o diretório atual
-                    //                 char destination_dir[512];
-                    //                 snprintf(destination_dir, sizeof(destination_dir), "%s/%s", current_dir, args[1]);
+                    // VERIFICAÇÃO DE OPERAÇÃO INTERNA - cd
+                    if( strcmp(args[0], "cd") == 0){
+                        char buffer[256];
+                        char *current_dir = getcwd(buffer, sizeof(buffer));             // Get diretorio atual
+                        if (current_dir != NULL) {
+                            if(args[1] != NULL ){
+                                if(strcmp(args[1], "..") == 0 ){                        // Se for operação de voltar um diretório
+                                    if(chdir(dirname(current_dir)) != 0){               // chdir seta o diretório atual para o parametro passado
+                                        printf("Falha ao retornar ao diretório pai!\n");    // |->> dirname retorna o diretório pai do parametro passado
+                                    }
+                                }
+                                else{                                                   // Se não, tentar entrar no diretorio especificado
+                                    // Concatenar o diretório desejado com o diretório atual
+                                    char destination_dir[512];
+                                    snprintf(destination_dir, sizeof(destination_dir), "%s/%s", current_dir, args[1]);
                                     
-                    //                 //mudar de diretorio com o chdir
-                    //                 if (chdir(destination_dir) != 0) {
-                    //                     perror("Diretório não encontrado!\n");
-                    //                 }
-                    //             }
-                    //         }
-                    //     } else {
-                    //         printf("Falha ao obter o diretório atual.\n");
-                    //     }
-                    //     current_dir = getcwd(buffer, sizeof(buffer));           // Get diretorio atual
-                    //     printf("Diretório atual: %s\n", current_dir);
-                    // }
+                                     //mudar de diretorio com o chdir
+                                    if (chdir(destination_dir) != 0) {
+                                        perror("Diretório não encontrado!\n");
+                                    }
+                                }
+                            }
+                        } else {
+                            printf("Falha ao obter o diretório atual.\n");
+                        }
+                        current_dir = getcwd(buffer, sizeof(buffer));           // Get diretorio atual
+                        printf("Diretório atual: %s\n", current_dir);
+                    }
                     /*Se não, tentar executar comando externo*/
-                    // else if (arg_count > 0){
+                    else if (arg_count > 0){
 
-                    //     pid_t pid = fork();                                                 // fork
+                        pid_t pid = fork();                                                 // fork
 
-                    //     if (pid == 0) {                                                     // Processo filho
-                    //         printf("sid child antes: %d", getsid(getpid()));
-                    //         if (setsid() < 0) {                                             // Muda o session id do processo filho
-                    //             fprintf(stderr, "Falha ao iniciar uma nova sessão para o processo filho.\n");
-                    //             exit(1);
-                    //         }
-                    //         printf("sid child depois: %d", getsid(getpid()));
+                        if (pid == 0) {                                                     // Processo filho
+                            // printf("sid child antes: %d", getsid(getpid()));
+                            if(flag_foreground == 0){
+                                if (setsid() < 0) {                                         // Muda o session id do processo filho se estiver em bg
+                                    fprintf(stderr, "Falha ao iniciar uma nova sessão para o processo filho.\n");
+                                    exit(1);
+                                }
+                            }
+                            // printf("sid child depois: %d", getsid(getpid()));
                             
-                    //         execvp(args[0], args);                                          // Chama o execvp para executar o comando com seus parametros
-                    //         perror("Erro ao executar o comando");
-                    //         exit(1);
-                    //     } 
-                    //     else if (pid > 0) {
-                    //         printf("sid pai: %d", getsid(getpid()));                        // Processo pai
-                    //         if(command_count == 1 && flag_foreground == 1){                 // Se há apenas um comando externo e foi terminado em %
-                    //             //===== Enquanto um processo roda em foreground ignorar sinais de ctrl+... =====//
-                    //             struct sigaction sa_fg;
-                    //             sa_fg.sa_handler = ctrl_handler;
-                    //             sa_fg.sa_flags = 0;
+                            execvp(args[0], args);                                          // Chama o execvp para executar o comando com seus parametros
+                            perror("Erro ao executar o comando");
+                            exit(1);
+                        } 
+                        else if (pid > 0) {
+                            // printf("sid pai: %d", getsid(getpid()));                     // Processo pai
+                            if(command_count == 1 && flag_foreground == 1){                 // Se há apenas um comando externo e foi terminado em %
+                                //===== Enquanto um processo roda em foreground ignorar sinais de ctrl+... =====//
+                                struct sigaction sa_fg;
+                                sa_fg.sa_handler = ctrl_handler_fg;
+                                sa_fg.sa_flags = 0;
 
-                    //             if ((sigemptyset(&sa_fg.sa_mask) == -1) ||
-                    //                 (sigaddset(&sa_fg.sa_mask, SIGINT) == -1) ||
-                    //                 (sigaddset(&sa_fg.sa_mask, SIGQUIT) == -1) ||
-                    //                 (sigaddset(&sa_fg.sa_mask, SIGTSTP) == -1))
-                    //                     perror("Failed to initialize the signal set");
-                    //             else if (sigprocmask(SIG_BLOCK, &sa_fg.sa_mask, NULL) == -1)
-                    //                 perror("Failed to block SIGINT SIGQUIT and SIGTSTP");
+                                if ((sigemptyset(&sa_fg.sa_mask) == -1) ||
+                                    (sigaction(SIGINT, &sa_fg, NULL) == -1) ||
+                                    (sigaction(SIGQUIT, &sa_fg, NULL) == -1) ||
+                                    (sigaction(SIGTSTP, &sa_fg, NULL) == -1))
+                                        perror("Failed to set SIGINT || SIGQUIT || SIGTSTP to handle Ctrl-...");
 
                                 
-                    //             waitpid(pid, NULL, 0);                                      // Espera pelo termino do processo em fg
-                    //         }
-                    //         else{
-                    //             signal(SIGCHLD, child_death_handler);                       // Registra um handler para SIGCHLD
-                    //         }
-                    //     }
-                    //     else {
-                    //         perror("Erro ao criar o processo");
-                    //         exit(1);
-                    //     }
-                    // }
+                                waitpid(pid, NULL, 0);                                      // Espera pelo termino do processo em fg
+
+                                // Ao terminar o processo em fg para de ignorar sinais de ctrl+...
+                                sa_fg.sa_handler = ctrl_handler;
+                            }
+                            else{
+                                signal(SIGCHLD, child_death_handler);                       // Registra um handler para SIGCHLD
+                            }
+                        }
+                        else {
+                            perror("Erro ao criar o processo");
+                            exit(1);
+                        }
+                    }
                 }
             }
         }
@@ -362,20 +367,28 @@ void child_death_handler(int n){
 
 /*================ SIGINT, SIGQUIT, SIGTSTP handler =================*/
 void ctrl_handler(int n){
-    /* struct sigaction sa_hand;
+    // struct sigaction sa_hand;
 
-    if ((sigemptyset(&sa_hand.sa_mask) == -1) ||
-        (sigaddset(&sa_hand.sa_mask, SIGINT) == -1) ||
-        (sigaddset(&sa_hand.sa_mask, SIGQUIT) == -1) ||
-        (sigaddset(&sa_hand.sa_mask, SIGTSTP) == -1))
-            perror("Failed to initialize the signal set");
-    else if (sigprocmask(SIG_BLOCK, &sa_hand.sa_mask, NULL) == -1)
-        perror("Failed to block SIGINT SIGQUIT and SIGTSTP");
+    // if ((sigemptyset(&sa_hand.sa_mask) == -1) ||
+    //     (sigaddset(&sa_hand.sa_mask, SIGINT) == -1) ||
+    //     (sigaddset(&sa_hand.sa_mask, SIGQUIT) == -1) ||
+    //     (sigaddset(&sa_hand.sa_mask, SIGTSTP) == -1))
+    //         perror("Failed to initialize the signal set");
+    // else if (sigprocmask(SIG_BLOCK, &sa_hand.sa_mask, NULL) == -1)
+    //     perror("Failed to block SIGINT SIGQUIT and SIGTSTP");
 
 
     char handmsg[] = "Não adianta me enviar o sinal por Ctrl-... . Estou vacinado!\n";
     int msglen = sizeof(handmsg);
-    write(STDERR_FILENO, handmsg, msglen); */
+    write(STDERR_FILENO, handmsg, msglen);
+    // char* line_commands = calloc(MAX_LINE_LENGTH, sizeof(char));            // Comando de entrada do usuario no shell
+    // fgets(line_commands, MAX_LINE_LENGTH, stdin);
+    // free(line_commands);
+}
+
+/*====== SIGINT, SIGQUIT, SIGTSTP handler while process executing in fg =======*/
+void ctrl_handler_fg(int n){
+    
 }
 
 
