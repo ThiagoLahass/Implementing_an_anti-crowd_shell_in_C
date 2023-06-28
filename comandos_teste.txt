@@ -1,0 +1,20 @@
+
+comando1 <3 comando2
+
+comando1 <3 comando2 <3 cd ..
+
+comando1 <3 comando2 <3 comando3 <3 comando4 <3 comando5
+
+comando1 <3 comando2 <3 comando3 <3 comando4 <3 comando5 <3 comando6
+
+comando1 <3 comando2 <3 comando3 <3 comando4 <3 comando5 <3 cd ..
+
+cd .. <3 cd teste <3 comando3 <3 comando4 <3 comando5 <3 comando1
+
+comando1 <3 comando2 <3 comando3 <3 comando4 <3 comando5 <3 cd .. <3 comando6
+
+comando1 <3 comando2 arg1 <3 comando3 % <3 comando4
+
+comando1 <3 comando2 arg1 <3 comando3 % <3 comando4 arg1 arg2 arg3 %
+
+comando1 <3 comando2 arg1 <3 comando3 % <3 comando4 arg1 arg2 <3 comando5 arg1 arg2 arg3 <3 cd ..
