@@ -47,6 +47,19 @@ int main( int argc, char* argv[]){
             perror("Failed to set SIGINT || SIGQUIT || SIGTSTP to handle Ctrl-...");
 
     while (1){
+        free(line_commands);
+        line_commands = calloc(MAX_LINE_LENGTH, sizeof(char));              // Comando de entrada do usuario no shell
+
+        for(int i = 0; i < MAX_EXTERNAL_COMMANDS; i++ ){
+            free(commands[i]);
+        }
+        free(commands);
+        commands = calloc(MAX_EXTERNAL_COMMANDS, sizeof(char*));     // Vetor de comandos ( no maximo MAX_COMMANDS)
+        for(int i = 0; i < MAX_EXTERNAL_COMMANDS; i++ ){
+            commands[i] = calloc(MAX_COMMAND_LENGTH, sizeof(char));         // Comandos em si
+        }
+
+
         int flag_input_valido = 1;
         int flag_foreground = 0;
 
@@ -292,24 +305,30 @@ int main( int argc, char* argv[]){
                             // printf("sid pai: %d", getsid(getpid()));                     // Processo pai
                             if(command_count == 1 && flag_foreground == 1){                 // Se há apenas um comando externo e foi terminado em %
                                 //===== Enquanto um processo roda em foreground ignorar sinais de ctrl+... =====//
-                                struct sigaction sa_fg;
-                                sa_fg.sa_handler = ctrl_handler_fg;
-                                sa_fg.sa_flags = 0;
+                                sa.sa_handler = ctrl_handler_fg;
 
-                                if ((sigemptyset(&sa_fg.sa_mask) == -1) ||
-                                    (sigaction(SIGINT, &sa_fg, NULL) == -1) ||
-                                    (sigaction(SIGQUIT, &sa_fg, NULL) == -1) ||
-                                    (sigaction(SIGTSTP, &sa_fg, NULL) == -1))
+                                if ((sigaction(SIGINT, &sa, NULL) == -1) ||
+                                    (sigaction(SIGQUIT, &sa, NULL) == -1) ||
+                                    (sigaction(SIGTSTP, &sa, NULL) == -1))
                                         perror("Failed to set SIGINT || SIGQUIT || SIGTSTP to handle Ctrl-...");
 
                                 
                                 waitpid(pid, NULL, 0);                                      // Espera pelo termino do processo em fg
 
                                 // Ao terminar o processo em fg para de ignorar sinais de ctrl+...
-                                sa_fg.sa_handler = ctrl_handler;
+                                sa.sa_handler = ctrl_handler;
+
+                                if ((sigaction(SIGINT, &sa, NULL) == -1) ||
+                                    (sigaction(SIGQUIT, &sa, NULL) == -1) ||
+                                    (sigaction(SIGTSTP, &sa, NULL) == -1))
+                                        perror("Failed to set SIGINT || SIGQUIT || SIGTSTP to handle Ctrl-...");
                             }
                             else{
-                                signal(SIGCHLD, child_death_handler);                       // Registra um handler para SIGCHLD
+                                // signal(SIGCHLD, child_death_handler);                       // Registra um handler para SIGCHLD
+                                sa.sa_handler = ctrl_handler_fg;
+
+                                if (sigaction(SIGCHLD, &sa, NULL) == -1)
+                                    perror("Failed to set SIGCHLD to handle child death");
                             }
                         }
                         else {
@@ -367,23 +386,20 @@ void child_death_handler(int n){
 
 /*================ SIGINT, SIGQUIT, SIGTSTP handler =================*/
 void ctrl_handler(int n){
-    // struct sigaction sa_hand;
+    struct sigaction sa_hand;
 
-    // if ((sigemptyset(&sa_hand.sa_mask) == -1) ||
-    //     (sigaddset(&sa_hand.sa_mask, SIGINT) == -1) ||
-    //     (sigaddset(&sa_hand.sa_mask, SIGQUIT) == -1) ||
-    //     (sigaddset(&sa_hand.sa_mask, SIGTSTP) == -1))
-    //         perror("Failed to initialize the signal set");
-    // else if (sigprocmask(SIG_BLOCK, &sa_hand.sa_mask, NULL) == -1)
-    //     perror("Failed to block SIGINT SIGQUIT and SIGTSTP");
+    if ((sigemptyset(&sa_hand.sa_mask) == -1) ||
+        (sigaddset(&sa_hand.sa_mask, SIGINT) == -1) ||
+        (sigaddset(&sa_hand.sa_mask, SIGQUIT) == -1) ||
+        (sigaddset(&sa_hand.sa_mask, SIGTSTP) == -1))
+            perror("Failed to initialize the signal set");
+    else if (sigprocmask(SIG_BLOCK, &sa_hand.sa_mask, NULL) == -1)
+        perror("Failed to block SIGINT SIGQUIT and SIGTSTP");
 
 
     char handmsg[] = "Não adianta me enviar o sinal por Ctrl-... . Estou vacinado!\n";
     int msglen = sizeof(handmsg);
     write(STDERR_FILENO, handmsg, msglen);
-    // char* line_commands = calloc(MAX_LINE_LENGTH, sizeof(char));            // Comando de entrada do usuario no shell
-    // fgets(line_commands, MAX_LINE_LENGTH, stdin);
-    // free(line_commands);
 }
 
 /*====== SIGINT, SIGQUIT, SIGTSTP handler while process executing in fg =======*/
