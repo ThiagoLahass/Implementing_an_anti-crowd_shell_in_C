@@ -1,5 +1,3 @@
-//#define _POSIX_SOURCE
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <libgen.h>
@@ -82,7 +80,7 @@ int main( int argc, char* argv[]){
             int i = 0;
             for(i = 0; i < current_session_index; i++){             // Mata os processos de todas as sessões
                 if (sessions[i] > 0 && sessions[i] != getsid(0)) {
-                    kill(sessions[i], SIGUSR1);
+                    kill(-sessions[i], SIGTERM);
                 }
             }
             break;
@@ -113,10 +111,7 @@ int main( int argc, char* argv[]){
             /*Remover espacos em branco no comeco e no final*/
             trim(commands[command_count]);
 
-
-            // printf("Comando\n%s\n", commands[command_count]);
-
-
+            //verificar se é comando interno
             if(strncmp(commands[command_count], "cd", 2) == 0 || strncmp(commands[command_count], "exit", 4) == 0){
                 internal_command_count++;
                 if(external_command_count > 0 ){
@@ -199,42 +194,62 @@ int main( int argc, char* argv[]){
 
         /*============================= PROCESSAMENTO DOS COMANDOS ===============================*/
         if( flag_input_valido == 1 ){
-            // Criação de um processo filho intermediario para o caso de background (processos filhos em uma sessao diferente)
-            pid_t pid = fork();
 
-            if (pid == 0) {                                                     // Processo filho
-                if (setsid() < 0) {                                             // Muda o session id do processo filho
-                    fprintf(stderr, "Falha ao iniciar uma nova sessão para o processo filho.\n");
-                    exit(1);
+            /*Verificação de foreground*/
+            flag_foreground = 0;
+            if(commands[command_count-1][strlen(commands[command_count-1])-1] == FOREGROUND){
+                flag_foreground = 1;
+                if(command_count > 1){
+                    fprintf(stderr, "ERRO: Não pode é possível rodar mais de um programa em foreground\n");
+                    flag_input_valido = 0;
+                    continue;
                 }
-                //===== Ignorar sinais de ctrl+... =====//
-                sa.sa_handler = ctrl_handler_fg;
+                if(internal_command_count == 1){
+                    fprintf(stderr, "WARNING: Comandos internos já são executados em foreground!\nContinuando a execução...\n");
+                }
+            }
 
-                if ((sigaction(SIGINT, &sa, NULL) == -1) ||
-                    (sigaction(SIGQUIT, &sa, NULL) == -1) ||
-                    (sigaction(SIGTSTP, &sa, NULL) == -1))
-                        perror("Failed to set SIGINT || SIGQUIT || SIGTSTP to handle Ctrl-...");
+            pid_t pid = 1;
 
-                if(command_count > 1 ){                 // Se houver mais de um comando em bg
-                    sa.sa_handler = sigusr1_handler;    // Se receber SIGUSR1 envia SIGKILL para todos da mesma sessão (caso de exit)
+            // Se for comando externo(s) e não for comando foreground, criar um processo intermediario, para ser o lider da nova sessão
+            if( internal_command_count == 0 && flag_foreground == 0){
+                // Criação de um processo filho intermediario para o caso de background (processos filhos em uma sessao diferente)
+                pid = fork();
+
+                if (pid == 0) {                                                     // Processo filho
+                    if (setsid() < 0) {                                             // Muda o session id do processo filho
+                        fprintf(stderr, "Falha ao iniciar uma nova sessão para o processo filho.\n");
+                        exit(1);
+                    }
+                    //===== Ignorar sinais de ctrl+... =====//
+                    sa.sa_handler = ctrl_handler_fg;
+
+                    if ((sigaction(SIGINT, &sa, NULL) == -1) ||
+                        (sigaction(SIGQUIT, &sa, NULL) == -1) ||
+                        (sigaction(SIGTSTP, &sa, NULL) == -1))
+                            perror("Failed to set SIGINT || SIGQUIT || SIGTSTP to handle Ctrl-...");
+
+                    if(command_count > 1 ){                 // Se houver mais de um comando em bg
+                        sa.sa_handler = sigusr1_handler;    // Se receber SIGUSR1 envia SIGKILL para todos da mesma sessão (caso de exit)
+                        
+                        if (sigaction(SIGUSR1, &sa, NULL) == -1)
+                            perror("Failed to set SIGUSR1 handler");
+                    }
+                    else{
+                        signal(SIGUSR1, SIG_IGN);           // Se houver só um comando, ignora o sinal
+                    }
+
                     
-                    if (sigaction(SIGUSR1, &sa, NULL) == -1)
-                        perror("Failed to set SIGUSR1 handler");
+                }
+                else if(pid > 0){
+                    // sleep(1);
+                    usleep(100);
+                    sessions[current_session_index++] = getsid(pid);    // Guarda nova sessão atribuida ao processo intermediario no array
                 }
                 else{
-                    signal(SIGUSR1, SIG_IGN);           // Se houver só um comando, ignora o sinal
+                    perror("Erro ao criar o processo");
+                    exit(1);
                 }
-
-                
-            }
-            else if(pid > 0){
-                // sleep(1);
-                usleep(100);
-                sessions[current_session_index++] = getsid(pid);    // Guarda nova sessão atribuida ao processo intermediario no array
-            }
-            else{
-                perror("Erro ao criar o processo");
-                exit(1);
             }
 
             sa.sa_handler = child_death_handler;
@@ -242,28 +257,13 @@ int main( int argc, char* argv[]){
             if (sigaction(SIGCHLD, &sa, NULL) == -1)
                 perror("Failed to set SIGCHLD to handle child death");
 
+        
             for(int i = 0; i < command_count; i++){
 
-                flag_foreground = 0;
-                /*Verificação de foreground*/
-                if(commands[i][strlen(commands[i])-1] == FOREGROUND){
-                    flag_foreground = 1;
-                    if(internal_command_count == 1){
-                        if(pid > 0)
-                            fprintf(stderr, "WARNING: Comandos internos já são executados em foreground!\nContinuando a execução...\n");
-                    }
-                    if(external_command_count > 1){
-                        if(pid > 0)
-                            fprintf(stderr, "ERRO: Não pode é possível rodar mais de um programa em foreground\n");
-                        flag_input_valido = 0;
-                        break;
-                    }
-                }
+                char* args[MAX_ARGS + 2];                       // Espaço adicional para o nome do programa, e terminação em NULL
+                int arg_count = 0;                              // contador de argumentos
 
-                char* args[MAX_ARGS + 2];                                   // Espaço adicional para o nome do programa, e terminação em NULL
-                int arg_count = 0;
-
-                args[arg_count++] = strtok(commands[i], " ");               // Pega o nome do programa
+                args[arg_count++] = strtok(commands[i], " ");   // Pega o nome do programa
 
                 /* Separar argumentos do comando */
                 char* token;
@@ -291,6 +291,7 @@ int main( int argc, char* argv[]){
                     flag_input_valido = 0;
                 }
 
+                /* Terminar vetor de strings em NULL para passar pro exec*/
                 if( flag_foreground == 1 ){
                     args[arg_count-1] = NULL;
                 }
@@ -332,22 +333,19 @@ int main( int argc, char* argv[]){
                     }
                     /*Se não, tentar executar comando externo*/
                     else if (arg_count > 0){
-                        // printf("sid child antes: %d", getsid(getpid()));
-
-                        if (pid == 0) {                                                 // Processo filho intermediario                                 
-                            if(flag_foreground == 0){                                   // Se em bg, mesmo session id do processo intermediario
+                        if (pid == 0) {                               // Processo filho intermediario                                 
+                            if(flag_foreground == 0){                 // Se em bg, mesmo session id do processo intermediario
                                 
                                 pid_t pid_bg = fork();
                                 
                                 if(pid_bg == 0){
-                                    execvp(args[0], args);                              // Chama o execvp para executar o comando com seus parametros
+                                    execvp(args[0], args);            // Chama o execvp para executar o comando com seus parametros
                                     perror("Erro ao executar o comando");
                                     exit(1);
                                 }
-                                else if(pid_bg > 0){                                    // Processo intermediário
+                                else if(pid_bg > 0){                  // Processo intermediário
                                     //======= Registra um tratador para SIGCHLD =======//
                                     sa.sa_handler = child_death_handler;
-
                                     if (sigaction(SIGCHLD, &sa, NULL) == -1)
                                         perror("Failed to set SIGCHLD to handle child death");
                                 }
@@ -358,12 +356,12 @@ int main( int argc, char* argv[]){
                             }
                         } 
                         else if (pid > 0) { 
-                            // printf("sid pai: %d", getsid(getpid()));                     // Processo pai
-                            if(command_count == 1 && flag_foreground == 1){                 // Se há apenas um comando externo e foi terminado em %
+                            // printf("sid pai: %d", getsid(getpid()));               // Processo pai
+                            if(command_count == 1 && flag_foreground == 1){           // Se há apenas um comando externo e foi terminado em %
                                 pid_t pid_fg = fork();
 
-                                if(pid_fg == 0){                                            // Processo filho
-                                    execvp(args[0], args);                                  // Chama o execvp para executar o comando com seus parametros
+                                if(pid_fg == 0){                                      // Processo filho
+                                    execvp(args[0], args);                            // Chama o execvp para executar o comando com seus parametros
                                     perror("Erro ao executar o comando");
                                     exit(1);
                                 } 
@@ -377,9 +375,9 @@ int main( int argc, char* argv[]){
                                             perror("Failed to set SIGINT || SIGQUIT || SIGTSTP to handle Ctrl-...");
 
                                     
-                                    waitpid(pid_fg, NULL, 0);                                      // Espera pelo termino do processo em fg
+                                    waitpid(pid_fg, NULL, 0);        // Espera pelo termino do processo em fg
                                     
-                                    // Ao terminar o processo em fg para de ignorar sinais de ctrl+...
+                                    /* Ao terminar o processo em fg para de ignorar sinais de ctrl+...*/
                                     sa.sa_handler = ctrl_handler;
 
                                     if ((sigaction(SIGINT, &sa, NULL) == -1) ||
@@ -393,9 +391,7 @@ int main( int argc, char* argv[]){
                                 }
                             }
                             else{
-                                // signal(SIGCHLD, child_death_handler);                       // Registra um handler para SIGCHLD
                                 sa.sa_handler = child_death_handler;
-
                                 if (sigaction(SIGCHLD, &sa, NULL) == -1)
                                     perror("Failed to set SIGCHLD to handle child death");
                             }
@@ -425,13 +421,7 @@ int main( int argc, char* argv[]){
                 return 0;
             }
         }
-        
         /*========================== FIM (PROCESSAMENTO DOS COMANDOS) ============================*/
-
-        /*======================== DEBUG CODE ========================*/
-        // printf("========== FIM WHILE========\n");
-        /*====================== END DEBUG CODE ======================*/
-        
     }
 
     free(line_commands);
