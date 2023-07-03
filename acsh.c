@@ -8,6 +8,7 @@
 #include <sys/wait.h>
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #define MAX_LINE_LENGTH 1000
 #define MAX_COMMAND_LENGTH 200
@@ -339,6 +340,13 @@ int main( int argc, char* argv[]){
                                 pid_t pid_bg = fork();
                                 
                                 if(pid_bg == 0){
+
+                                    //Redirecionar entrada/saida de processos em bg
+                                    int devnull = open("/dev/null", O_RDWR);
+                                    dup2(devnull, STDIN_FILENO);
+                                    dup2(devnull, STDOUT_FILENO);
+                                    close(devnull);
+
                                     execvp(args[0], args);            // Chama o execvp para executar o comando com seus parametros
                                     perror("Erro ao executar o comando");
                                     exit(1);
