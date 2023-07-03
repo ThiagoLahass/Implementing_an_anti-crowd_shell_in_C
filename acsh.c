@@ -57,7 +57,7 @@ int main( int argc, char* argv[]){
             free(commands[i]);
         }
         free(commands);
-        commands = calloc(MAX_EXTERNAL_COMMANDS, sizeof(char*));     // Vetor de comandos ( no maximo MAX_COMMANDS)
+        commands = calloc(MAX_EXTERNAL_COMMANDS, sizeof(char*));            // Vetor de comandos ( no maximo MAX_COMMANDS)
         for(int i = 0; i < MAX_EXTERNAL_COMMANDS; i++ ){
             commands[i] = calloc(MAX_COMMAND_LENGTH, sizeof(char));         // Comandos em si
         }
@@ -215,14 +215,21 @@ int main( int argc, char* argv[]){
                     (sigaction(SIGTSTP, &sa, NULL) == -1))
                         perror("Failed to set SIGINT || SIGQUIT || SIGTSTP to handle Ctrl-...");
 
-                // Se receber SIGUSR1 envia SIGKILL para todos da mesma sessão (caso de exit)
-                sa.sa_handler = sigusr1_handler;
+                if(command_count > 1 ){                 // Se houver mais de um comando em bg
+                    sa.sa_handler = sigusr1_handler;    // Se receber SIGUSR1 envia SIGKILL para todos da mesma sessão (caso de exit)
+                    
+                    if (sigaction(SIGUSR1, &sa, NULL) == -1)
+                        perror("Failed to set SIGUSR1 handler");
+                }
+                else{
+                    signal(SIGUSR1, SIG_IGN);           // Se houver só um comando, ignora o sinal
+                }
 
-                if (sigaction(SIGUSR1, &sa, NULL) == -1)
-                    perror("Failed to set SIGUSR1 handler");
+                
             }
             else if(pid > 0){
-                sleep(1);
+                // sleep(1);
+                usleep(100);
                 sessions[current_session_index++] = getsid(pid);    // Guarda nova sessão atribuida ao processo intermediario no array
             }
             else{
@@ -397,25 +404,25 @@ int main( int argc, char* argv[]){
                 }
             }
             if(pid == 0){     // Filho intermediario espera pela morte dos filhos e retorna
-            pid_t childpid;
-            int status;
-            while ((childpid = wait(&status)) > 0) {
-                if (WTERMSIG(status) == SIGUSR1) {                  // Se o filho terminou devido ao SIGUSR1
-                    pid_t current_sid = getsid(0);                  // Get o id da sessão do processo
-                    // Envia o sinal SIGKILL para todos os processos da sessão atual
-                    if (current_sid != -1) {
-                        if (kill(-current_sid, SIGKILL) != 0) {
-                            perror("Erro ao enviar o sinal SIGKILL");
+                pid_t childpid;
+                int status;
+                while ((childpid = wait(&status)) > 0) {
+                    if (WTERMSIG(status) == SIGUSR1) {                  // Se o filho terminou devido ao SIGUSR1
+                        pid_t current_sid = getsid(0);                  // Get o id da sessão do processo
+                        // Envia o sinal SIGKILL para todos os processos da sessão atual
+                        if (current_sid != -1) {
+                            if (kill(-current_sid, SIGKILL) != 0) {
+                                perror("Erro ao enviar o sinal SIGKILL");
+                                return 1;
+                            }
+                        } else {
+                            perror("Erro ao obter o ID da sessão atual");
                             return 1;
                         }
-                    } else {
-                        perror("Erro ao obter o ID da sessão atual");
-                        return 1;
                     }
                 }
-            }
-            removeSessionArray(sessions, getsid(0), current_session_index);
-            return 0;
+                removeSessionArray(sessions, getsid(0), current_session_index);
+                return 0;
             }
         }
         
@@ -483,11 +490,6 @@ void ctrl_handler(int n){
 /*====== SIGINT, SIGQUIT, SIGTSTP handler while process executing in fg =======*/
 void ctrl_handler_fg(int n){
     
-}
-
-/*====== SIGUSR1 handler when executing a single bg process =======*/
-void sigusr1_handler_ignore(int n){
-
 }
 
 /*====== SIGUSR1 handler when executing more than one bg process =======*/

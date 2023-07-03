@@ -15,7 +15,7 @@ int main(int argc, char* argv[]){
     
     printf("Executing program aux 'prog2'\n");
     int i = 1;
-    while (i<50){
+    while (1){
         printf("Looping (prog2)...\n");
         sleep(1);
         i++;

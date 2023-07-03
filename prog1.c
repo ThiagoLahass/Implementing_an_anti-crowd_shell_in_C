@@ -15,10 +15,10 @@ int main(int argc, char* argv[]){
     
     printf("Executing program aux 'prog1'\n");
     int i = 1;
-    while (i<6){
-        printf("Looping (prog1)...\n");
-        sleep(1);
-        i++;
+    while (1){
+        // printf("Looping (prog1)...\n");
+        // sleep(1);
+        // i++;
     }
     return 0;
 }
