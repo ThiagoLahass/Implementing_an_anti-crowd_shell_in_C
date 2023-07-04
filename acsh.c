@@ -217,8 +217,8 @@ int main( int argc, char* argv[]){
                 // Criação de um processo filho intermediario para o caso de background (processos filhos em uma sessao diferente)
                 pid = fork();
 
-                if (pid == 0) {                                                     // Processo filho
-                    if (setsid() < 0) {                                             // Muda o session id do processo filho
+                if (pid == 0) {                                                         // Processo filho                                                  
+                    if (setsid() < 0) {    // Muda o session id do processo filho
                         fprintf(stderr, "Falha ao iniciar uma nova sessão para o processo filho.\n");
                         exit(1);
                     }
@@ -240,6 +240,12 @@ int main( int argc, char* argv[]){
                         signal(SIGUSR1, SIG_IGN);           // Se houver só um comando, ignora o sinal
                     }
 
+                    signal(SIGCHLD, SIG_IGN);
+
+                    sa.sa_handler = child_death_handler;
+
+                    if (sigaction(SIGCHLD, &sa, NULL) == -1)
+                        perror("Failed to set SIGCHLD to handle child death");
                     
                 }
                 else if(pid > 0){
@@ -253,10 +259,10 @@ int main( int argc, char* argv[]){
                 }
             }
 
-            sa.sa_handler = child_death_handler;
+            // sa.sa_handler = child_death_handler;
 
-            if (sigaction(SIGCHLD, &sa, NULL) == -1)
-                perror("Failed to set SIGCHLD to handle child death");
+            // if (sigaction(SIGCHLD, &sa, NULL) == -1)
+            //     perror("Failed to set SIGCHLD to handle child death");
 
         
             for(int i = 0; i < command_count; i++){
@@ -355,7 +361,7 @@ int main( int argc, char* argv[]){
                                     //======= Registra um tratador para SIGCHLD =======//
                                     sa.sa_handler = child_death_handler;
                                     if (sigaction(SIGCHLD, &sa, NULL) == -1)
-                                        perror("Failed to set SIGCHLD to handle child death");
+                                        perror("Failed to set SIGCHLD to handle child death");   
                                 }
                                 else{
                                     perror("Erro ao criar o processo");
@@ -437,6 +443,7 @@ int main( int argc, char* argv[]){
         free(commands[i]);
     }
     free(commands);
+    free(sessions);
 
     return 0;
 }
@@ -479,6 +486,8 @@ void ctrl_handler(int n){
             perror("Failed to initialize the signal set");
     else if (sigprocmask(SIG_BLOCK, &sa_hand.sa_mask, NULL) == -1)
         perror("Failed to block SIGINT SIGQUIT and SIGTSTP");
+    // signal(SIGTSTP, SIG_IGN);
+    // signal(SIGSTOP, SIG_IGN);
 
     char handmsg[] = "Não adianta me enviar o sinal por Ctrl-... . Estou vacinado!\n";
     int msglen = sizeof(handmsg);

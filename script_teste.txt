@@ -1,0 +1,38 @@
+Exibicao do prompt
+
+Criação de um ou mais processos (sessão separada so acsh)
+
+Maximo de processos externos em bg: 5
+
+Cada seção tem os processos que foram criados durante uma mesma linha de comando
+
+Processo em bg não estarão associados a nenhum terminal de controle
+    Processos criados pelo acsh não devem receber nenhum sinal gerado por meio de teclas do terminal
+    acsh retorna imediatamente para receber novos comandos
+
+SIGUSR1 em processos bg:
+    1 processo isolado: não morre
+    + de 1 processo: todos daquela seção morrem
+
+Operações internas (separadas de quaisquer outros comandos)
+    cd
+    exit
+
+Processo em foreground (mesma sessão do acsh)
+    Operador % no final da linha 
+    Prompt só será novamente exibido ao final da execução do processo de foreground criado
+
+Maximo de argumentos: 3
+
+Maximo de programas: 5
+
+Sinal Ctrl-... no acsh:
+    Capturar sinal
+    “Não adianta me enviar o sinal por Ctrl-... . Estou vacinado!!”
+    Processo em fg executa tratamento default
+        acsh ignora durante a eexecução do processo em fg
+
+
+
+
+

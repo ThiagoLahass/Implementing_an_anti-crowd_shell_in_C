@@ -1,3 +1,7 @@
+# Bruno Santos Fernandes
+# Gabriel Gatti da Silva
+# Thiago Felippe Neitzke Lahass
+
 PROJ_NAME = acsh
 
 compile:
